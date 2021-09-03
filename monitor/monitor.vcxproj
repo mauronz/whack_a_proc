@@ -166,7 +166,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\shared\communication.cpp" />
-    <ClCompile Include="log.cpp" />
+    <ClCompile Include="..\shared\log.cpp" />
     <ClCompile Include="monitor_handlers.cpp" />
     <ClCompile Include="monitor.cpp" />
   </ItemGroup>
