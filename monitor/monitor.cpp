@@ -1,13 +1,19 @@
 #include "monitor.h"
+#include "log.h"
 #include "peb.h"
 #include "ntdef.h"
 #include "communication.h"
+#include "monitor_handlers.h"
 #include <stdio.h>
 
 #pragma comment(lib, "pe-sieve.lib")
 
 #define SHELLCODE_SIZE 96
 #define MAX_THREAD_COUNT 1000
+
+HANDLE hTargetProcess;
+HANDLE hTargetMainThread;
+LPVOID pTargetBaseAddress;
 
 HANDLE hSemaphore;
 HANDLE hThreadCountMutex;
@@ -196,7 +202,7 @@ DWORD __stdcall ThreadRoutine(LPVOID lpParams) {
 }
 
 HANDLE CreateWorkerThread(DWORD dwPid, DWORD dwTid) {
-	HANDLE hPipe = CreateThreadPipe(dwPid, dwTid);
+	HANDLE hPipe = CreateThreadPipe(dwPid, dwTid, PIPE_TEMPLATE);
 	if (hPipe == INVALID_HANDLE_VALUE)
 		return NULL;
 	WaitForSingleObject(hThreadCountMutex, INFINITE);
@@ -226,6 +232,14 @@ Options:\n\
     Inject into newly created processes without asking for confirmation.", argv0, argv0);
 }
 
+HANDLE SetupSession(HANDLE hProcess, HANDLE hThread) {
+	if (!SetEntrypointHook(hProcess))
+		return NULL;
+	hTargetProcess = hProcess;
+	hTargetMainThread = hThread;
+	return CreateWorkerThread(GetProcessId(hProcess), GetThreadId(hThread));
+}
+
 int wmain(int argc, WCHAR **argv) {
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
@@ -245,7 +259,11 @@ int wmain(int argc, WCHAR **argv) {
 		bPrintUsage = TRUE;
 
 	while (i < argc && !bPrintUsage) {
-		if (!wcscmp(argv[i], L"/protect")) {
+		if (!wcscmp(argv[i], L"/verbose")) {
+			bVerbose = TRUE;
+			i += 1;
+		}
+		else if (!wcscmp(argv[i], L"/protect")) {
 			config.ProtectHook = TRUE;
 			i += 1;
 		}
@@ -283,8 +301,8 @@ int wmain(int argc, WCHAR **argv) {
 			printf("[-] Error creating process\n");
 			return 1;
 		}
-		SetEntrypointHook(pi.hProcess);
-		HANDLE hThread = CreateWorkerThread(pi.dwProcessId, pi.dwThreadId);
+
+		HANDLE hThread = SetupSession(pi.hProcess, pi.hThread);
 		ResumeThread(pi.hThread);
 		DWORD dwRes;
 		while (bRunning) {

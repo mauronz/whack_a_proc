@@ -2,7 +2,7 @@
 
 #include <Windows.h>
 
-NTSTATUS __stdcall bh_NtCreateUserProcess(
+NTSTATUS bh_NtCreateUserProcess(
 	_Out_ PHANDLE ProcessHandle,
 	_Out_ PHANDLE ThreadHandle,
 	_In_ ACCESS_MASK ProcessDesiredAccess,
@@ -16,7 +16,7 @@ NTSTATUS __stdcall bh_NtCreateUserProcess(
 	_In_opt_ PVOID AttributeList
 );
 
-VOID __stdcall ah_ZwMapViewOfSection(
+VOID ah_ZwMapViewOfSection(
 	HANDLE          SectionHandle,
 	HANDLE          ProcessHandle,
 	PVOID           *BaseAddress,
@@ -30,7 +30,7 @@ VOID __stdcall ah_ZwMapViewOfSection(
 	DWORD retvalue
 );
 
-VOID __stdcall bh_NtCreateThread(
+VOID bh_NtCreateThread(
 	OUT PHANDLE             ThreadHandle,
 	IN ACCESS_MASK          DesiredAccess,
 	IN PVOID   ObjectAttributes OPTIONAL,
@@ -40,7 +40,7 @@ VOID __stdcall bh_NtCreateThread(
 	IN PVOID         InitialTeb,
 	IN BOOLEAN              CreateSuspended);
 
-VOID __stdcall bh_NtCreateThreadEx(
+VOID bh_NtCreateThreadEx(
 	OUT  PHANDLE ThreadHandle,
 	IN  ACCESS_MASK DesiredAccess,
 	IN  PVOID ObjectAttributes OPTIONAL,
@@ -54,7 +54,7 @@ VOID __stdcall bh_NtCreateThreadEx(
 	IN  PVOID AttributeList OPTIONAL
 );
 
-VOID __stdcall ah_NtProtectVirtualMemory(
+VOID ah_NtProtectVirtualMemory(
 	IN HANDLE               ProcessHandle,
 	IN OUT PVOID            *BaseAddress,
 	IN OUT PULONG           NumberOfBytesToProtect,
@@ -62,6 +62,6 @@ VOID __stdcall ah_NtProtectVirtualMemory(
 	OUT PULONG              OldAccessProtection,
 	DWORD retvalue);
 
-VOID __stdcall bh_NtResumeThread(HANDLE ThreadHandle, PULONG SuspendCount);
-VOID __stdcall bh_LoadLibraryW(LPCWSTR LibName);
-VOID __stdcall bh_LoadLibraryA(LPCSTR LibName);
+VOID bh_NtResumeThread(HANDLE ThreadHandle, PULONG SuspendCount);
+VOID bh_LoadLibraryW(LPCWSTR LibName);
+VOID bh_LoadLibraryA(LPCSTR LibName);

@@ -17,39 +17,41 @@ extern HMODULE hGlobalModule;
 TARGET_PROCESS pMyProcesses[MYPROC_NUM] = { 0 };
 
 VOID InjectProcess(DWORD dwPid, DWORD dwTid) {
-	DWORD dwSize;
-	DWORD dwCode = CODE_INJECT;
 	for (int i = 0; i < MYPROC_NUM && pMyProcesses[i].Pid; i++) {
 		if (dwPid == pMyProcesses[i].Pid && !pMyProcesses[i].Injected) {
-			WriteFile(hPipe, &dwCode, sizeof(dwCode), &dwSize, NULL);
-			WriteFile(hPipe, &dwPid, sizeof(dwPid), &dwSize, NULL);
-			WriteFile(hPipe, &dwTid, sizeof(dwTid), &dwSize, NULL);
-			ReadFile(hPipe, &dwCode, sizeof(dwCode), &dwSize, NULL);
-			if (dwCode != CODE_OK)
-				MessageBoxA(NULL, "Error code!", "scan", 0);
+			IPC_MESSAGE* pMsg = CreateIPCMessage(CODE_INJECT, 2, &dwPid, sizeof(dwPid), &dwTid, sizeof(dwTid));
+			if (SendIPCMessage(pMsg, hPipe)) {
+				DestroyIPCMessage(pMsg);
+				IPC_MESSAGE* pResponse = ReceiveIPCMessage(hPipe);
+				if (pResponse) {
+					if (pResponse->Code != CODE_OK)
+						MessageBoxA(NULL, "Error code!", "scan", 0);
+					DestroyIPCMessage(pResponse);
+				}
+			}
 		}
 		pMyProcesses[i].Injected = TRUE;
 	}
 }
 
 VOID ScanProcess(DWORD dwPid, DWORD dwTid) {
-	DWORD dwSize;
-	DWORD dwCode = CODE_SCAN;
-
-	/*if (dwPid == GetCurrentProcessId())
-		return;*/
-	WriteFile(hPipe, &dwCode, sizeof(dwCode), &dwSize, NULL);
-	WriteFile(hPipe, &dwPid, sizeof(dwPid), &dwSize, NULL);
-	ReadFile(hPipe, &dwCode, sizeof(dwCode), &dwSize, NULL);
-	if (dwCode != CODE_OK)
-		MessageBoxA(NULL, "Error code!", "scan", 0);
+	IPC_MESSAGE* pMsg = CreateIPCMessage(CODE_SCAN, 1, &dwPid, sizeof(dwPid));
+	if (SendIPCMessage(pMsg, hPipe)) {
+		DestroyIPCMessage(pMsg);
+		IPC_MESSAGE* pResponse = ReceiveIPCMessage(hPipe);
+		if (pResponse) {
+			if (pResponse->Code != CODE_OK)
+				MessageBoxA(NULL, "Error code!", "scan", 0);
+			DestroyIPCMessage(pResponse);
+		}
+	}
 
 	if (dwTid == 0)
 		return;
 	InjectProcess(dwPid, dwTid);
 }
 
-NTSTATUS __stdcall bh_NtCreateUserProcess(
+NTSTATUS bh_NtCreateUserProcess(
 	_Out_ PHANDLE ProcessHandle,
 	_Out_ PHANDLE ThreadHandle,
 	_In_ ACCESS_MASK ProcessDesiredAccess,
@@ -93,7 +95,7 @@ NTSTATUS __stdcall bh_NtCreateUserProcess(
 	return status;
 }
 
-VOID __stdcall ah_ZwMapViewOfSection(
+VOID ah_ZwMapViewOfSection(
 	HANDLE          SectionHandle,
 	HANDLE          ProcessHandle,
 	PVOID           *BaseAddress,
@@ -117,7 +119,7 @@ VOID __stdcall ah_ZwMapViewOfSection(
 	}
 }
 
-VOID __stdcall bh_NtCreateThread(
+VOID bh_NtCreateThread(
 	OUT PHANDLE             ThreadHandle,
 	IN ACCESS_MASK          DesiredAccess,
 	IN PVOID   ObjectAttributes OPTIONAL,
@@ -135,7 +137,7 @@ VOID __stdcall bh_NtCreateThread(
 	}
 }
 
-VOID __stdcall bh_NtCreateThreadEx(
+VOID bh_NtCreateThreadEx(
 	OUT  PHANDLE ThreadHandle,
 	IN  ACCESS_MASK DesiredAccess,
 	IN  PVOID ObjectAttributes OPTIONAL,
@@ -157,13 +159,13 @@ VOID __stdcall bh_NtCreateThreadEx(
 	}
 }
 
-VOID __stdcall bh_NtResumeThread(HANDLE ThreadHandle, PULONG SuspendCount) {
+VOID bh_NtResumeThread(HANDLE ThreadHandle, PULONG SuspendCount) {
 	DWORD dwPid = GetProcessIdOfThread(ThreadHandle);
 	DWORD dwTid = GetThreadId(ThreadHandle);
 	ScanProcess(dwPid, dwTid);
 }
 
-VOID __stdcall bh_LoadLibraryA(LPCSTR LibName) {
+VOID bh_LoadLibraryA(LPCSTR LibName) {
 	LPVOID pRetAddress;
 	HMODULE hModule;
 	__asm {
@@ -176,7 +178,7 @@ VOID __stdcall bh_LoadLibraryA(LPCSTR LibName) {
 	}
 }
 
-VOID __stdcall bh_LoadLibraryW(LPCWSTR LibName) {
+VOID bh_LoadLibraryW(LPCWSTR LibName) {
 	LPVOID pRetAddress;
 	HMODULE hModule;
 	__asm {
@@ -189,7 +191,7 @@ VOID __stdcall bh_LoadLibraryW(LPCWSTR LibName) {
 	}
 }
 
-VOID __stdcall ah_NtProtectVirtualMemory(
+VOID ah_NtProtectVirtualMemory(
 	IN HANDLE               ProcessHandle,
 	IN OUT PVOID            *BaseAddress,
 	IN OUT PULONG           NumberOfBytesToProtect,
@@ -199,6 +201,8 @@ VOID __stdcall ah_NtProtectVirtualMemory(
 	LPVOID pRetAddress, pStackFrame;
 	HMODULE hModule;
 	BOOL bDoScan = FALSE;
+
+	HANDLE hMainHandle = GetModuleHandleA(NULL);
 
 	if (NewAccessProtection == PAGE_EXECUTE || NewAccessProtection == PAGE_EXECUTE_READ || NewAccessProtection == PAGE_EXECUTE_READWRITE || NewAccessProtection == PAGE_EXECUTE_WRITECOPY) {
 		__asm {
@@ -215,7 +219,7 @@ VOID __stdcall ah_NtProtectVirtualMemory(
 				mov pRetAddress, eax
 			}
 			if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)pRetAddress, &hModule)) {
-				if (hModule == GetModuleHandleA(NULL))
+				if (hModule == hMainHandle)
 					bDoScan = TRUE;
 				if (hModule == hGlobalModule)
 					break;

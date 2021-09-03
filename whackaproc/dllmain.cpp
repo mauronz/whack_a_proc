@@ -16,13 +16,13 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 	int argc;
 	WCHAR **argv;
 	WCHAR pPipeName[64];
-	DWORD dwMode, dwCode, dwSize;
+	DWORD dwMode;
 	switch (ul_reason_for_call)
 	{
-	case DLL_PROCESS_ATTACH:
+	case DLL_PROCESS_ATTACH: {
 		hGlobalModule = hModule;
 		argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-		wsprintfW(pPipeName, L"\\\\.\\pipe\\whack%08x%08x", GetCurrentProcessId(), GetCurrentThreadId());
+		wsprintfW(pPipeName, PIPE_TEMPLATE, GetCurrentProcessId(), GetCurrentThreadId());
 		hPipe = CreateFileW(pPipeName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 		dwMode = PIPE_READMODE_MESSAGE;
 		SetNamedPipeHandleState(
@@ -30,10 +30,21 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 			&dwMode,  // new pipe mode 
 			NULL,     // don't set maximum bytes 
 			NULL);    // don't set maximum time
-		dwCode = CODE_INIT;
-		if (WriteFile(hPipe, &dwCode, sizeof(dwCode), &dwSize, NULL))
-			if (ReadFile(hPipe, &config, sizeof(config), &dwSize, NULL))
-				SetHooks();
+
+		IPC_MESSAGE* pMsg = CreateSimpleIPCMessage(CODE_INIT);
+		if (SendIPCMessage(pMsg, hPipe)) {
+			DestroyIPCMessage(pMsg);
+			IPC_MESSAGE* pResponse = ReceiveIPCMessage(hPipe);
+			if (pResponse) {
+				if (pResponse->Code == CODE_OK && pResponse->ArgCount == 1) {
+					memcpy(&config, pResponse->Args[0].Buf, sizeof(config));
+					SetHooks();
+				}
+				DestroyIPCMessage(pResponse);
+			}
+		}
+	}
+		
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:
 	case DLL_PROCESS_DETACH:
